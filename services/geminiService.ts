@@ -1,9 +1,16 @@
 import { GoogleGenAI } from "@google/genai";
 import { KnowledgeItem } from "../types";
 
-// Initialize the Gemini Client
-// @ts-ignore: process.env is assumed to be available per instructions
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Helper to lazily get the AI client.
+// This prevents the app from crashing on startup if the API key is missing or process.env is undefined.
+function getAiClient() {
+  // @ts-ignore: process.env is assumed to be available via Vite define
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API Key 未配置。请确保在部署环境 (Vercel/Netlify) 中设置了 API_KEY 环境变量。");
+  }
+  return new GoogleGenAI({ apiKey });
+}
 
 const SYSTEM_INSTRUCTION = `
 你是一个专业的数学 LaTeX 和 JSON 格式化专家。
@@ -27,6 +34,7 @@ const SYSTEM_INSTRUCTION = `
  */
 async function processBatch(items: any[]): Promise<any[]> {
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: [
