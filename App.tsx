@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileJson, ArrowRight, Download, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileJson, ArrowRight, Download, RefreshCw, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
 import { Button } from './components/Button';
 import { JsonViewer } from './components/JsonViewer';
-import { processJsonKnowledgeBase } from './services/geminiService';
-import { KnowledgeItem, ProcessingStatus, ProcessProgress } from './types';
+import { processJsonKnowledgeBase, ProcessResult } from './services/geminiService';
+import { ProcessingStatus, ProcessProgress } from './types';
 
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -11,6 +11,7 @@ const App: React.FC = () => {
   const [processedData, setProcessedData] = useState<any | null>(null);
   const [status, setStatus] = useState<ProcessingStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [resultStats, setResultStats] = useState<{success: number, failed: number} | null>(null);
   const [progress, setProgress] = useState<ProcessProgress>({ total: 0, current: 0, percentage: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -29,6 +30,7 @@ const App: React.FC = () => {
   const parseFile = (fileToParse: File) => {
     setStatus('parsing');
     setError(null);
+    setResultStats(null);
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -52,23 +54,30 @@ const App: React.FC = () => {
 
     setStatus('processing');
     setError(null);
+    setResultStats(null);
     setProgress({ total: 0, current: 0, percentage: 0 });
 
     try {
-      const result = await processJsonKnowledgeBase(originalData, (current, total) => {
+      const result: ProcessResult = await processJsonKnowledgeBase(originalData, (current, total) => {
         setProgress({
           current,
           total,
           percentage: total > 0 ? Math.round((current / total) * 100) : 0
         });
       });
-      setProcessedData(result);
+      
+      setProcessedData(result.data);
+      setResultStats({ success: result.stats.success, failed: result.stats.failed });
       setStatus('complete');
+      
+      if (result.stats.failed > 0) {
+          setError(`处理完成，但有 ${result.stats.failed} 个条目因网络或API限制跳过处理（保持原样）。`);
+      }
+
     } catch (err: any) {
       console.error(err);
-      // Display the actual error message thrown by the service
       const msg = err instanceof Error ? err.message : "未知错误";
-      setError(`处理失败: ${msg}`);
+      setError(`严重错误导致中断: ${msg}`);
       setStatus('error');
     }
   };
@@ -94,6 +103,7 @@ const App: React.FC = () => {
     setProcessedData(null);
     setStatus('idle');
     setError(null);
+    setResultStats(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -111,7 +121,7 @@ const App: React.FC = () => {
             <h1 className="text-xl font-bold text-slate-800">最优化 JSON 知识库标准化工具</h1>
           </div>
           <div className="text-sm text-slate-500 hidden sm:block">
-            由 Gemini 1.5 Flash 驱动
+            由 Gemini 1.5 Flash 驱动 (高容错模式)
           </div>
         </div>
       </header>
@@ -119,13 +129,28 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* Error Alert */}
-        {error && (
+        {/* Alerts */}
+        {error && status === 'error' && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-red-700">
             <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
             <div>
               <h3 className="font-semibold">错误</h3>
               <p className="text-sm whitespace-pre-wrap">{error}</p>
+            </div>
+          </div>
+        )}
+        
+        {status === 'complete' && resultStats && resultStats.failed > 0 && (
+           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3 text-amber-800">
+            <AlertTriangle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <div>
+              <h3 className="font-semibold">部分完成</h3>
+              <p className="text-sm">
+                共处理 {resultStats.success + resultStats.failed} 条数据。
+                成功标准化 <span className="font-bold">{resultStats.success}</span> 条。
+                <span className="font-bold text-red-600">{resultStats.failed}</span> 条因 API 限制保持原样（未修改）。
+                建议检查结果后，再次上传处理未完成的部分。
+              </p>
             </div>
           </div>
         )}
@@ -173,8 +198,8 @@ const App: React.FC = () => {
                   转义处理：应用双反斜杠以符合 JSON 格式（如 \\min）。
                 </li>
                 <li className="flex gap-2">
-                  <span className="font-mono bg-slate-100 px-1 rounded text-xs py-0.5">recursive</span>
-                  深度遍历：自动查找任意层级的 name 和 description 字段。
+                  <span className="font-mono bg-slate-100 px-1 rounded text-xs py-0.5">robust</span>
+                  高容错模式：即使部分处理失败，也能返回已完成的数据。
                 </li>
               </ul>
             </div>
@@ -200,7 +225,7 @@ const App: React.FC = () => {
                 {status === 'processing' && (
                    <div className="flex flex-col items-end mr-4 min-w-[200px]">
                      <div className="flex justify-between w-full text-xs mb-1">
-                        <span className="text-slate-500 font-medium">总体进度</span>
+                        <span className="text-slate-500 font-medium">处理进度</span>
                         <span className="text-indigo-600 font-bold">{progress.percentage}%</span>
                      </div>
                      <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
@@ -242,7 +267,7 @@ const App: React.FC = () => {
                 {processedData ? (
                    <JsonViewer 
                    data={processedData} 
-                   title="格式化结果 (AI)" 
+                   title={resultStats ? `格式化结果 (成功: ${resultStats.success}, 跳过: ${resultStats.failed})` : "格式化结果"} 
                    className="h-full"
                  />
                 ) : (
@@ -252,7 +277,7 @@ const App: React.FC = () => {
                          <div className="w-16 h-16 border-[6px] border-indigo-100 border-t-indigo-600 rounded-full animate-spin mx-auto mb-6"></div>
                          
                          <h3 className="text-slate-800 font-bold text-xl mb-2">正在深度标准化...</h3>
-                         <p className="text-slate-500 mb-8">AI 正在逐条分析并优化 LaTeX 公式与格式</p>
+                         <p className="text-slate-500 mb-8">正在以高容错模式处理数据 (批次: 3条/次)</p>
                          
                          <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-lg text-left">
                             <div className="flex justify-between items-end mb-2">
@@ -270,7 +295,7 @@ const App: React.FC = () => {
                                 ></div>
                             </div>
                             <p className="text-xs text-slate-400 text-center mt-2">
-                                处理大型文件可能需要几分钟，请保持页面开启。
+                                为防止 API 限流，处理速度已限制。请耐心等待。
                             </p>
                          </div>
                        </div>

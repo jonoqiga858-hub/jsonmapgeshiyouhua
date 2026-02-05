@@ -64,22 +64,17 @@ async function processBatch(items: any[]): Promise<any[]> {
       throw new Error("Empty response from Gemini");
     }
 
-    // With responseSchema, the text is guaranteed to be a valid JSON string conforming to the schema
     const parsed = JSON.parse(text);
     return Array.isArray(parsed) ? parsed : [parsed];
   } catch (error: any) {
     console.error("Batch processing error detail:", error);
-    // Throw a more descriptive error if possible
     if (error.message && error.message.includes("429")) {
-        throw new Error("请求过于频繁 (Rate Limit Exceeded)。正在重试...");
+        throw new Error("RATE_LIMIT");
     }
     throw error;
   }
 }
 
-/**
- * Traverses the JSON object to find all items that have name and description fields.
- */
 function findProcessableItems(data: any, items: any[] = []) {
   if (Array.isArray(data)) {
     data.forEach(item => findProcessableItems(item, items));
@@ -92,10 +87,16 @@ function findProcessableItems(data: any, items: any[] = []) {
   return items;
 }
 
-/**
- * Helper to pause execution
- */
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+export interface ProcessResult {
+  data: any;
+  stats: {
+    total: number;
+    success: number;
+    failed: number;
+  };
+}
 
 /**
  * Main entry point for processing.
@@ -103,7 +104,7 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export async function processJsonKnowledgeBase(
   originalData: any,
   onProgress: (current: number, total: number) => void
-): Promise<any> {
+): Promise<ProcessResult> {
   const dataCopy = JSON.parse(JSON.stringify(originalData));
   
   const itemsToProcess = findProcessableItems(dataCopy);
@@ -112,11 +113,14 @@ export async function processJsonKnowledgeBase(
   console.log(`Found ${total} items to process.`);
 
   if (total === 0) {
-    return dataCopy;
+    return { data: dataCopy, stats: { total: 0, success: 0, failed: 0 } };
   }
 
-  // REDUCED BATCH SIZE for stability with large files
-  const BATCH_SIZE = 5; 
+  // EXTREME CONSERVATIVE MODE
+  // Batch size 3 to ensure fast processing per chunk and avoid token limits
+  const BATCH_SIZE = 3; 
+  let successCount = 0;
+  let failedCount = 0;
 
   for (let i = 0; i < total; i += BATCH_SIZE) {
     const batch = itemsToProcess.slice(i, i + BATCH_SIZE);
@@ -128,13 +132,14 @@ export async function processJsonKnowledgeBase(
     }));
 
     let retries = 3;
-    let success = false;
+    let batchSuccess = false;
 
-    while (retries > 0 && !success) {
+    // Retry loop
+    while (retries > 0 && !batchSuccess) {
       try {
-        // Add a small delay between batches to avoid 429 Rate Limit errors
+        // Enforce a strict delay to respect rate limits
         if (i > 0) {
-            await delay(1000); // Wait 1 second between requests
+            await delay(2000); // Wait 2 seconds between every batch
         }
 
         const results = await processBatch(payload);
@@ -146,21 +151,36 @@ export async function processJsonKnowledgeBase(
           }
         });
         
-        success = true;
-      } catch (e) {
+        batchSuccess = true;
+        successCount += batch.length;
+      } catch (e: any) {
         retries--;
-        console.warn(`Batch failed at index ${i}, retries left: ${retries}`, e);
+        const isRateLimit = e.message === "RATE_LIMIT" || (e.message && e.message.includes("429"));
+        
+        console.warn(`Batch failed at index ${i}, retries left: ${retries}. Reason: ${e.message}`);
         
         if (retries === 0) {
-            throw new Error(`处理第 ${i + 1} 到 ${i + BATCH_SIZE} 条数据时失败。请检查网络或稍后重试。`);
+           // SOFT FAIL: Do NOT throw error. Just log and continue.
+           // The original data remains unchanged for this batch.
+           console.error(`Batch at index ${i} permanently failed. Skipping.`);
+           failedCount += batch.length;
+        } else {
+            // Exponential backoff
+            const waitTime = isRateLimit ? 5000 * (4 - retries) : 2000;
+            await delay(waitTime); 
         }
-        // Exponential backoff: wait longer if it failed (2s, 4s, etc.)
-        await delay(2000 * (3 - retries)); 
       }
     }
 
     onProgress(Math.min(i + BATCH_SIZE, total), total);
   }
 
-  return dataCopy;
+  return { 
+    data: dataCopy, 
+    stats: {
+        total,
+        success: successCount,
+        failed: failedCount
+    }
+  };
 }
