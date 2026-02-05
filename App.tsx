@@ -7,7 +7,7 @@ import { KnowledgeItem, ProcessingStatus, ProcessProgress } from './types';
 
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
-  const [originalData, setOriginalData] = useState<any | null>(null); // Changed to any to support arbitrary root
+  const [originalData, setOriginalData] = useState<any | null>(null); 
   const [processedData, setProcessedData] = useState<any | null>(null);
   const [status, setStatus] = useState<ProcessingStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,6 @@ const App: React.FC = () => {
         const text = e.target?.result as string;
         const json = JSON.parse(text);
         
-        // We no longer force an array wrap here because the new service handles any structure
         setOriginalData(json);
         setProcessedData(null);
         setStatus('idle');
@@ -53,7 +52,6 @@ const App: React.FC = () => {
 
     setStatus('processing');
     setError(null);
-    // Reset progress initially
     setProgress({ total: 0, current: 0, percentage: 0 });
 
     try {
@@ -66,9 +64,11 @@ const App: React.FC = () => {
       });
       setProcessedData(result);
       setStatus('complete');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("AI 处理过程中发生错误。可能是因为 API Key 无效、网络问题或文件内容过于复杂。");
+      // Display the actual error message thrown by the service
+      const msg = err instanceof Error ? err.message : "未知错误";
+      setError(`处理失败: ${msg}`);
       setStatus('error');
     }
   };
@@ -270,7 +270,7 @@ const App: React.FC = () => {
                                 ></div>
                             </div>
                             <p className="text-xs text-slate-400 text-center mt-2">
-                                请勿关闭浏览器，保持网络连接...
+                                处理大型文件可能需要几分钟，请保持页面开启。
                             </p>
                          </div>
                        </div>
