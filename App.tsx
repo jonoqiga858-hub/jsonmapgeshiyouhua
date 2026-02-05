@@ -196,17 +196,20 @@ const App: React.FC = () => {
                 </button>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-1 justify-end">
                 {status === 'processing' && (
-                  <div className="flex flex-col items-end mr-2">
-                    <span className="text-xs text-indigo-600 font-semibold">{progress.percentage}% 完成</span>
-                    <div className="w-32 h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
-                      <div 
-                        className="h-full bg-indigo-600 transition-all duration-300 ease-out"
-                        style={{ width: `${progress.percentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
+                   <div className="flex flex-col items-end mr-4 min-w-[200px]">
+                     <div className="flex justify-between w-full text-xs mb-1">
+                        <span className="text-slate-500 font-medium">总体进度</span>
+                        <span className="text-indigo-600 font-bold">{progress.percentage}%</span>
+                     </div>
+                     <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                       <div 
+                         className="h-full bg-indigo-600 transition-all duration-300 ease-out"
+                         style={{ width: `${progress.percentage}%` }}
+                       ></div>
+                     </div>
+                   </div>
                 )}
                 
                 {status !== 'complete' && status !== 'processing' && (
@@ -243,20 +246,39 @@ const App: React.FC = () => {
                    className="h-full"
                  />
                 ) : (
-                  <div className="h-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400">
+                  <div className="h-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 p-6">
                      {status === 'processing' ? (
-                       <div className="text-center">
-                         <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
-                         <p className="text-slate-600 font-medium">正在深度分析并标准化知识库...</p>
-                         <p className="text-sm text-slate-400 mt-2">
-                           已识别 {progress.total} 个待处理条目<br/>
-                           正在处理第 {progress.current} 到 {Math.min(progress.current + 10, progress.total)} 条
-                         </p>
+                       <div className="text-center w-full max-w-sm">
+                         <div className="w-16 h-16 border-[6px] border-indigo-100 border-t-indigo-600 rounded-full animate-spin mx-auto mb-6"></div>
+                         
+                         <h3 className="text-slate-800 font-bold text-xl mb-2">正在深度标准化...</h3>
+                         <p className="text-slate-500 mb-8">AI 正在逐条分析并优化 LaTeX 公式与格式</p>
+                         
+                         <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-lg text-left">
+                            <div className="flex justify-between items-end mb-2">
+                                <span className="text-sm font-semibold text-slate-600">已处理条目</span>
+                                <div className="text-right">
+                                    <span className="text-2xl font-bold text-indigo-600">{progress.current}</span>
+                                    <span className="text-slate-400 text-sm ml-1">/ {progress.total}</span>
+                                </div>
+                            </div>
+                            
+                            <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden mb-2 border border-slate-100">
+                                <div 
+                                    className="h-full bg-indigo-500 transition-all duration-300"
+                                    style={{ width: `${progress.percentage}%` }}
+                                ></div>
+                            </div>
+                            <p className="text-xs text-slate-400 text-center mt-2">
+                                请勿关闭浏览器，保持网络连接...
+                            </p>
+                         </div>
                        </div>
                      ) : (
                         <>
-                          <ArrowRight className="w-12 h-12 mb-2 opacity-20" />
-                          <p>处理后的结果将显示在这里</p>
+                          <ArrowRight className="w-16 h-16 mb-4 opacity-10 text-slate-400" />
+                          <p className="text-lg font-medium text-slate-400">处理后的结果将显示在这里</p>
+                          <p className="text-sm text-slate-300 mt-2">点击上方“开始 AI 格式化”按钮开始</p>
                         </>
                      )}
                   </div>
