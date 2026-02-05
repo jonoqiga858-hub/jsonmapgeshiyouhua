@@ -1,0 +1,5 @@
+{
+  "name": "最优化 JSON 知识库标准化工具",
+  "description": "智能工具，用于标准化和格式化最优化算法知识库 JSON 文件，专门处理 LaTeX 数学符号和结构完整性。",
+  "requestFramePermissions": []
+}
